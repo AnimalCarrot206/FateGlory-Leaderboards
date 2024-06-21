@@ -12,6 +12,7 @@ local RETRY_WAIT_TIME = 1
 local LeaderboardsResetTimeMemoryStore = 
 	MemoryStoreService:GetSortedMap("LeaderboardsResetTimeMemoryStore")
 
+-- Useful function to retry network reqeusts
 local function pcallUntilSucceed(func, ...)
 	local result = table.pack(pcall(func, ...))
 	local isSuccess = result[1]
@@ -25,10 +26,13 @@ local function pcallUntilSucceed(func, ...)
 	return table.unpack(result)
 end
 
+-- Making a "class" for each leadeboard
+-- Useful for separating them
 local LeaderboardSortedMap = {} 
 do
 	LeaderboardSortedMap.__index = LeaderboardSortedMap
-
+	
+	-- Default constructor
 	function LeaderboardSortedMap.new(name: string, defaultValue: number, refreshTimeInSec: number)
 		local newLeaderboard = {}
 		newLeaderboard._memoryStore = MemoryStoreService:GetSortedMap(name)
@@ -39,7 +43,8 @@ do
 
 		return setmetatable(newLeaderboard, LeaderboardSortedMap)
 	end
-
+	
+	-- Retrieves top |n| (depends on playersCount argument) players from MemoryStore
 	function LeaderboardSortedMap:getTop(playersCount: number): {{userId: number, value: number}}
 		local memoryStoreSortedMap = self._memoryStore :: MemoryStoreSortedMap
 
@@ -49,7 +54,7 @@ do
 			Enum.SortDirection.Descending,
 			playersCount
 		)
-
+		
 		local result = {}
 		for place, item: {key: number, value: number} in ipairs(top) do
 			result[place] = {
@@ -60,7 +65,8 @@ do
 
 		return result
 	end
-
+	
+	-- Useful for getting a specific player's record
 	function LeaderboardSortedMap:getPlayerValue(userId: number): number?
 		local memoryStoreSortedMap = self._memoryStore :: MemoryStoreSortedMap
 
@@ -71,7 +77,8 @@ do
 		)
 		return item or self._defaultValue
 	end
-
+	
+	-- Returns how many seconds can value be in the MemoryStore, depending on last refresh time
 	function LeaderboardSortedMap:_getExpiration()
 		local refreshTime = self._refreshTime :: number
 		local lastRefreshTime = self._lastRefreshTime :: number
@@ -79,7 +86,8 @@ do
 
 		return refreshTime - (currentTime - lastRefreshTime)
 	end
-
+	
+	-- Updates a player's entry in the MemoryStore
 	function LeaderboardSortedMap:addToPlayerLeaderStat(userId: number, valueToAdd: number)
 		local memoryStoreSortedMap = self._memoryStore :: MemoryStoreSortedMap
 
@@ -130,7 +138,6 @@ local Leaderboards = {}
 Leaderboards.STATS = {
 	KILLS = "KILLS",
 	WINS = "WINS",
-	PERSONAL = "PERSONAL",
 }
 Leaderboards.PERSONAL_STATS = {
 	LOSES = "LOSES",
@@ -174,9 +181,6 @@ function Leaderboards:clearAll()
 	for leaderboardName, leaderboard in pairs(Leaderboards[MONTHLY_PREFIX]) do
 		itemsCount += leaderboard:clearAll()
 	end
-	for leaderboardName, leaderboard in pairs(Leaderboards.PERSONAL) do
-		itemsCount += leaderboard:clearAll()
-	end
 
 	return itemsCount
 end
@@ -209,6 +213,21 @@ local function updateLeaderboards(prefix: string, updatePeriod: number)
 	for _, leaderboard in pairs(Leaderboards[prefix]) do
 		leaderboard._lastRefreshTime = lastRefresh
 	end
+	-- Checks if last refresh time expired already
+	if os.time() - lastRefresh < updatePeriod then
+		return
+	end
+	-- Updating refresh time
+	LeaderboardsResetTimeMemoryStore:UpdateAsync(prefix, function(value, sortKey)
+		if not value then
+			value = 0
+		end
+		local currentTime = os.time()
+		if currentTime - value < updatePeriod then
+			return nil
+		end
+		return currentTime, sortKey
+	end, updatePeriod)
 end
 
 task.spawn(function()
