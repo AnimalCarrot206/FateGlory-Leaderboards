@@ -14,15 +14,19 @@ local LeaderboardsResetTimeMemoryStore =
 
 -- Useful function to retry network reqeusts
 local function pcallUntilSucceed(func, ...)
+	-- table.pack allows us to save all args returned by function
 	local result = table.pack(pcall(func, ...))
 	local isSuccess = result[1]
-
+	
+	-- Function is called until it finishes its execution without errors
 	while not isSuccess do
 		task.wait(RETRY_WAIT_TIME)
 		result = table.pack(pcall(func, ...))
 		isSuccess = result[1]
 	end
-
+	
+	-- Returning all function arguments + boolean value that indicate
+	-- if function called successfuly, just like common pcall
 	return table.unpack(result)
 end
 
@@ -36,8 +40,11 @@ do
 	function LeaderboardSortedMap.new(name: string, defaultValue: number, refreshTimeInSec: number)
 		local newLeaderboard = {}
 		newLeaderboard._memoryStore = MemoryStoreService:GetSortedMap(name)
+		-- Shows how many seconds needs to reset leaderboard
 		newLeaderboard._refreshTime = refreshTimeInSec
+		-- Shows when that leaderboard was reseted last time
 		newLeaderboard._lastRefreshTime = 0
+		-- Default value is needed in order not to clog the memory store
 		newLeaderboard._defaultValue = defaultValue
 		newLeaderboard._name = name
 
@@ -47,7 +54,8 @@ do
 	-- Retrieves top |n| (depends on playersCount argument) players from MemoryStore
 	function LeaderboardSortedMap:getTop(playersCount: number): {{userId: number, value: number}}
 		local memoryStoreSortedMap = self._memoryStore :: MemoryStoreSortedMap
-
+		
+		-- Getting top from store, sort direction is descending, because we need highest values
 		local _, top = pcallUntilSucceed(
 			memoryStoreSortedMap.GetRangeAsync,
 			memoryStoreSortedMap,
@@ -69,12 +77,14 @@ do
 	-- Useful for getting a specific player's record
 	function LeaderboardSortedMap:getPlayerValue(userId: number): number?
 		local memoryStoreSortedMap = self._memoryStore :: MemoryStoreSortedMap
-
+		
+		-- Getting value from store
 		local _, item, _ = pcallUntilSucceed(
 			memoryStoreSortedMap.GetAsync,
 			memoryStoreSortedMap,
 			tostring(userId)
 		)
+		-- There could be not item, so we return defaultValue instead
 		return item or self._defaultValue
 	end
 	
@@ -90,7 +100,8 @@ do
 	-- Updates a player's entry in the MemoryStore
 	function LeaderboardSortedMap:addToPlayerLeaderStat(userId: number, valueToAdd: number)
 		local memoryStoreSortedMap = self._memoryStore :: MemoryStoreSortedMap
-
+		
+		-- Updating player key, or adding a new one if not existed
 		pcallUntilSucceed(
 			memoryStoreSortedMap.UpdateAsync,
 			memoryStoreSortedMap,
@@ -104,6 +115,7 @@ do
 				local newValue = value + valueToAdd
 				return newValue, newValue
 			end,
+			-- Getting how many seconds that key should lasts
 			self:_getExpiration()
 		)
 	end
@@ -125,7 +137,7 @@ do
 			for _, item in items do
 				pcallUntilSucceed(memoryStoreSortedMap.RemoveAsync, memoryStoreSortedMap, item.key)
 			end
-
+			-- If items count less than 200 it means that we reached all values in the store
 			if #items < 200 then
 				break
 			end
@@ -140,14 +152,10 @@ Leaderboards.STATS = {
 	WINS = "WINS",
 }
 Leaderboards.PERSONAL_STATS = {
-	LOSES = "LOSES",
 	KILLS = "KILLS",
 	WINS = "WINS",
-	RATING = "RATING",
-	XP_WIN = "XP_WIN",
-	XP_LOSE = "XP_LOSE",
 }
-
+-- Creating weekly leaderboards
 Leaderboards[WEEKLY_PREFIX] = {
 	[Leaderboards.STATS.KILLS] = LeaderboardSortedMap.new(
 		`{Leaderboards.STATS.KILLS}{WEEKLY_PREFIX}`,
@@ -160,6 +168,7 @@ Leaderboards[WEEKLY_PREFIX] = {
 		SECONDS_IN_WEEK
 	),
 }
+-- Creating monthly leaderboards
 Leaderboards[MONTHLY_PREFIX] = {
 	[Leaderboards.STATS.KILLS] = LeaderboardSortedMap.new(
 		`{Leaderboards.STATS.KILLS}{MONTHLY_PREFIX}`,
@@ -172,6 +181,7 @@ Leaderboards[MONTHLY_PREFIX] = {
 		SECONDS_IN_MONTHS
 	),
 }
+-- Allows us to clear leaderboards manually
 function Leaderboards:clearAll()
 	local itemsCount = 0
 
@@ -188,41 +198,51 @@ end
 do
 	local function updateGlobal(userId: number, prefix: string)
 		local player = Players:GetPlayerByUserId(userId)
+		-- Its a folden where all players data contains
 		local dataFolder = player.Data :: Folder
 		
 		for leaderboardName, leaderboard in pairs(Leaderboards[prefix]) do
+			-- Getting some player data and then updating it
 			local numberValue = dataFolder:FindFirstChild(leaderboardName) :: NumberValue
 			leaderboard:addToPlayerLeaderStat(userId, numberValue.Value)
 		end
 	end
 	
 	function Leaderboards:addPlayerStatsToLeaderboards(userId: number)
+		-- Updating weekly leaderboard
 		updateGlobal(userId, WEEKLY_PREFIX)
+		-- Updating monthly leaderboard
 		updateGlobal(userId, MONTHLY_PREFIX)
 	end
 end
 
+-- Updates leaderboards lastRefreshTime
 local function updateLeaderboards(prefix: string, updatePeriod: number)
 	local _, lastRefresh = pcallUntilSucceed(
 		LeaderboardsResetTimeMemoryStore.GetAsync,
 		LeaderboardsResetTimeMemoryStore,
 		prefix
 	)
+	-- If not lastRefreshTime was assigned just assign to it 0
 	lastRefresh = lastRefresh or 0
 	
+	--Updating all leaderboards
 	for _, leaderboard in pairs(Leaderboards[prefix]) do
 		leaderboard._lastRefreshTime = lastRefresh
 	end
+	
 	-- Checks if last refresh time expired already
 	if os.time() - lastRefresh < updatePeriod then
 		return
 	end
-	-- Updating refresh time
+	-- Updating refresh time in memory store for other servers
 	LeaderboardsResetTimeMemoryStore:UpdateAsync(prefix, function(value, sortKey)
 		if not value then
 			value = 0
 		end
 		local currentTime = os.time()
+		-- If condition is complete it means that lastRefreshTime was
+		-- already updated and then we just abort the operation
 		if currentTime - value < updatePeriod then
 			return nil
 		end
