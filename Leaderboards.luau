@@ -1,4 +1,4 @@
---By CursedKolo for HD and RoDevs
+-- By CursedKolo for HD and RoDevs
 local Players = game:GetService("Players")
 local MemoryStoreService = game:GetService("MemoryStoreService")
 
