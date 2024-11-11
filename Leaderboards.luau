@@ -1,9 +1,9 @@
 -- By CursedKolo for HD and RoDevs
 -- By CursedKolo for HD and RoDevs
 -- By CursedKolo for HD and RoDevs
--- https://discord.com/invite/gZW8q6KPJZ
--- https://discord.com/invite/gZW8q6KPJZ
--- https://discord.com/invite/gZW8q6KPJZ
+-- ALL MY PORTFOLIO HERE: https://discord.com/invite/gZW8q6KPJZ
+-- ALL MY PORTFOLIO HERE: https://discord.com/invite/gZW8q6KPJZ
+-- ALL MY PORTFOLIO HERE: https://discord.com/invite/gZW8q6KPJZ
 local Players = game:GetService("Players")
 local MemoryStoreService = game:GetService("MemoryStoreService")
 
@@ -269,6 +269,6 @@ return Leaderboards
 -- By CursedKolo for HD and RoDevs
 -- By CursedKolo for HD and RoDevs
 -- By CursedKolo for HD and RoDevs
--- https://discord.com/invite/gZW8q6KPJZ
--- https://discord.com/invite/gZW8q6KPJZ
--- https://discord.com/invite/gZW8q6KPJZ
+-- ALL MY PORTFOLIO HERE: https://discord.com/invite/gZW8q6KPJZ
+-- ALL MY PORTFOLIO HERE: https://discord.com/invite/gZW8q6KPJZ
+-- ALL MY PORTFOLIO HERE: https://discord.com/invite/gZW8q6KPJZ
